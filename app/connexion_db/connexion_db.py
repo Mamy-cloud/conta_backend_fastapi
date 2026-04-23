@@ -1,20 +1,17 @@
+import os
+import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
-from pathlib import Path
-import logging
-import os
 
-logging.basicConfig(level=logging.DEBUG)
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
-
+load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
-logger.debug(f"DATABASE_URL chargé : {DATABASE_URL}")
 
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL manquant dans le fichier .env")
+    raise ValueError("DATABASE_URL manquant (env Render ou local .env)")
 
 engine = create_engine(
     DATABASE_URL,
