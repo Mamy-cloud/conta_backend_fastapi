@@ -1,4 +1,4 @@
-from connexion_db.connexion_db import engine, Base
+from app.connexion_db.connexion_db import engine, Base
 from sqlalchemy import (
     Column, Text, Integer, ForeignKey,
     CheckConstraint

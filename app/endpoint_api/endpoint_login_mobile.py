@@ -3,13 +3,13 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from connexion_db.connexion_db import get_db
-from models.base_model_login_mobile import (
+from app.connexion_db.connexion_db import get_db
+from app.models.base_model_login_mobile import (
     LoginMobileRequest,
     LoginMobileResponse,
     ServerStatusResponse,
 )
-from request_command.verif_login_mobile import verif_login_mobile
+from app.request_command.verif_login_mobile import verif_login_mobile
 
 logger = logging.getLogger(__name__)
 
