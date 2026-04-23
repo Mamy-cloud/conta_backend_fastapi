@@ -30,5 +30,13 @@ async def root():
 async def health_check():
     return {"status": "ok"}
 
+@app.get("/bonjour/uptime_robot")
+def bonjour_uptime_robot():
+    return {
+        "message": "Bonjour Uptime Robot 👋",
+        "status": "ok",
+        
+    }
+
 app.include_router(login_router)
 
