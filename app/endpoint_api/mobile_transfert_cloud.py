@@ -1,20 +1,20 @@
 import json
-import logging
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect
 
-from app.connexion_cloud.connexion_db import get_db
-
-from app.models.base_model_from_mobile import SyncResponse
-from app.request_command.transfert_cloud_from_mobile import handle_sync_from_mobile
-from app.request_command.request_create_table import (
+from connexion_db.connexion_db import get_db
+from models.base_model_from_mobile import SyncResponse
+from request_command.transfert_cloud_from_mobile import handle_sync_from_mobile
+from request_command.request_create_table import (
+    Base,
     LoginUser,
+    InfoPersoTemoin,
     CollectInfoFromTemoin,
+    InfoPersoTemoinCollect,
     create_all_tables,
 )
-
-logger = logging.getLogger(__name__)
+from connexion_db.connexion_db import engine
 
 router = APIRouter(
     prefix="/mobile/transfert/cloud",
@@ -22,26 +22,15 @@ router = APIRouter(
 )
 
 
-# ─────────────────────────────────────────────────────────────
-# SAFE ENGINE ACCESS (évite crash au import)
-# ─────────────────────────────────────────────────────────────
-
-def _get_engine():
-    from app.connexion_cloud.connexion_db import engine
-    return engine
-
-
-# ─────────────────────────────────────────────────────────────
-# TABLE CHECK (SAFE)
-# ─────────────────────────────────────────────────────────────
+# ─── Helper : vérifie que toutes les tables et relations existent ─────────────
 
 def _check_tables_and_relations() -> dict:
-    engine = _get_engine()
-
+    """
+    Vérifie que les 4 tables existent en base et que les foreign keys
+    sont bien en place. Crée les tables manquantes si nécessaire.
+    """
     inspector = inspect(engine)
-    existing = inspector.get_table_names()
-
-    logger.debug(f"Tables existantes : {existing}")
+    existing  = inspector.get_table_names()
 
     required = {
         "login_user",
@@ -52,171 +41,162 @@ def _check_tables_and_relations() -> dict:
 
     missing = required - set(existing)
 
+    # Crée les tables manquantes automatiquement
     if missing:
-        logger.warning(f"Tables manquantes → création : {missing}")
-        try:
-            create_all_tables()
-        except Exception as e:
-            logger.error(f"Erreur création tables : {e}", exc_info=True)
-            raise
+        create_all_tables()
 
+    # Vérifie les foreign keys après création éventuelle
     fk_status = {}
-
     for table in required:
-        try:
-            fks = inspector.get_foreign_keys(table)
-        except Exception:
-            fks = []
-
+        fks = inspector.get_foreign_keys(table)
         fk_status[table] = [
             {
-                "colonne": fk.get("constrained_columns"),
-                "référence_table": fk.get("referred_table"),
-                "référence_colonne": fk.get("referred_columns"),
+                "colonne":          fk["constrained_columns"],
+                "référence_table":  fk["referred_table"],
+                "référence_colonne":fk["referred_columns"],
             }
             for fk in fks
         ]
 
     return {
-        "tables_existantes": list(existing),
-        "tables_manquantes": list(missing),
-        "tables_créées": list(missing) if missing else [],
-        "foreign_keys": fk_status,
+        "tables_existantes":  list(existing),
+        "tables_manquantes":  list(missing),
+        "tables_créées":      list(missing) if missing else [],
+        "foreign_keys":       fk_status,
     }
 
 
-# ─────────────────────────────────────────────────────────────
-# HEALTH CHECK
-# ─────────────────────────────────────────────────────────────
+# ─── GET /mobile/transfert/cloud/health ───────────────────────────────────────
 
 @router.get(
     "/health",
-    summary="Vérifie DB + serveur",
+    summary="Vérifie les tables et relations PostgreSQL",
     status_code=status.HTTP_200_OK,
 )
 def check_db_health():
+    """
+    Vérifie que toutes les tables et foreign keys sont en place.
+    Crée les tables manquantes si nécessaire.
+    """
     try:
         result = _check_tables_and_relations()
-
         return {
-            "success": True,
-            "status": "ok",
-            "message": "Serveur opérationnel",
+            "status":  "ok",
             "details": result,
         }
-
     except Exception as e:
-        logger.error(f"Health check error : {e}", exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail={"success": False, "message": str(e)},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur vérification DB : {str(e)}",
         )
 
 
-# ─────────────────────────────────────────────────────────────
-# SYNC MOBILE
-# ─────────────────────────────────────────────────────────────
+# ─── POST /mobile/transfert/cloud/sync ────────────────────────────────────────
 
 @router.post(
     "/sync",
-    summary="Sync mobile → cloud",
+    summary="Reçoit une collecte depuis le mobile et synchronise vers le cloud",
     response_model=SyncResponse,
     status_code=status.HTTP_200_OK,
 )
 async def sync_from_mobile(
-    user_id: str = Form(...),
-    temoin: str = Form(...),
-    questionnaire: str = Form(...),
-    duree_audio: int = Form(0),
-    audio: UploadFile = File(None),
-    image: UploadFile = File(None),
-    db: Session = Depends(get_db),
+    user_id:            str        = Form(...,  description="ID de l'utilisateur mobile"),
+    temoin:             str        = Form(...,  description="JSON stringifié du témoin"),
+    questionnaire:      str        = Form(...,  description="JSON stringifié du questionnaire"),
+    duree_audio:        int        = Form(0,    description="Durée de l'audio en secondes"),
+    audio:              UploadFile = File(None, description="Fichier audio (optionnel)"),
+    image:              UploadFile = File(None, description="Photo du témoin (optionnel)"),
+    db:                 Session    = Depends(get_db),
 ):
-    logger.info(f"sync_from_mobile user_id={user_id}")
+    """
+    Endpoint principal appelé par le mobile (multipart/form-data).
 
-    # ── CHECK TABLES SAFE ──
+    Flux :
+    1. Vérifie les tables et relations PostgreSQL
+    2. Parse le JSON temoin + questionnaire
+    3. Upload audio → bucket Supabase collect_audio
+    4. Upload image → bucket Supabase collect_audio
+    5. Upsert témoin → table info_perso_temoin
+    6. Crée collecte → table collect_info_from_temoin (synced = 1)
+    7. Crée lien     → table info_perso_temoin_collect
+    8. Commit et retourne SyncResponse
+    """
+
+    # 1. Vérifie / crée les tables ────────────────────────────────────────────
     try:
         _check_tables_and_relations()
     except Exception as e:
-        logger.error(f"Table error : {e}", exc_info=True)
-        return SyncResponse(
-            success=False,
-            message=f"Erreur DB init : {str(e)}",
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur initialisation tables : {str(e)}",
         )
 
-    # ── VALID JSON ──
+    # 2. Validation JSON basique ──────────────────────────────────────────────
     try:
         json.loads(temoin)
         json.loads(questionnaire)
-    except Exception as e:
-        return SyncResponse(
-            success=False,
-            message=f"JSON invalide : {str(e)}",
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"JSON invalide : {str(e)}",
         )
 
-    # ── SYNC LOGIC ──
-    try:
-        response = await handle_sync_from_mobile(
-            db=db,
-            user_id=user_id,
-            temoin_json=temoin,
-            questionnaire_json=questionnaire,
-            audio_file=audio,
-            image_file=image,
-            duree_audio=duree_audio,
+    # 3. Traitement principal ─────────────────────────────────────────────────
+    response = await handle_sync_from_mobile(
+        db                 = db,
+        user_id            = user_id,
+        temoin_json        = temoin,
+        questionnaire_json = questionnaire,
+        audio_file         = audio,
+        image_file         = image,
+        duree_audio        = duree_audio,
+    )
+
+    if not response.success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=response.message,
         )
 
-        return response
-
-    except Exception as e:
-        logger.error(f"sync error : {e}", exc_info=True)
-        return SyncResponse(
-            success=False,
-            message=str(e),
-        )
+    return response
 
 
-# ─────────────────────────────────────────────────────────────
-# GET COLLECTES
-# ─────────────────────────────────────────────────────────────
+# ─── GET /mobile/transfert/cloud/collectes/{user_id} ─────────────────────────
 
 @router.get(
     "/collectes/{user_id}",
-    summary="Collectes utilisateur",
+    summary="Récupère toutes les collectes synchronisées d'un utilisateur",
+    status_code=status.HTTP_200_OK,
 )
-def get_collectes_by_user(user_id: str, db: Session = Depends(get_db)):
-    try:
-        user = db.query(LoginUser).filter(LoginUser.id == user_id).first()
-
-        if not user:
-            raise HTTPException(
-                status_code=404,
-                detail={"success": False, "message": "Utilisateur introuvable"},
-            )
-
-        collectes = db.query(CollectInfoFromTemoin).filter(
-            CollectInfoFromTemoin.user_id == user_id
-        ).all()
-
-        return {
-            "success": True,
-            "user_id": user_id,
-            "total": len(collectes),
-            "collectes": [
-                {
-                    "id": c.id,
-                    "url_audio": c.url_audio,
-                    "duree_audio": c.duree_audio,
-                    "synced": c.synced,
-                    "created_at": c.created_at,
-                }
-                for c in collectes
-            ],
-        }
-
-    except Exception as e:
-        logger.error(f"get_collectes error : {e}", exc_info=True)
+def get_collectes_by_user(
+    user_id: str,
+    db:      Session = Depends(get_db),
+):
+    """Retourne toutes les collectes d'un utilisateur (synced = 1)."""
+    user = db.query(LoginUser).filter(LoginUser.id == user_id).first()
+    if not user:
         raise HTTPException(
-            status_code=500,
-            detail={"success": False, "message": str(e)},
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Utilisateur '{user_id}' introuvable",
         )
+
+    collectes = (
+        db.query(CollectInfoFromTemoin)
+        .filter(CollectInfoFromTemoin.user_id == user_id)
+        .all()
+    )
+
+    return {
+        "user_id":   user_id,
+        "total":     len(collectes),
+        "collectes": [
+            {
+                "id":           c.id,
+                "url_audio":    c.url_audio,
+                "duree_audio":  c.duree_audio,
+                "synced":       c.synced,
+                "created_at":   c.created_at,
+            }
+            for c in collectes
+        ],
+    }

@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.endpoint_api.mobile_transfert_cloud import router as mobile_transfert_router
-from app.endpoint_api.endpoint_login_mobile import router as login_router
+from endpoint_api.mobile_transfert_cloud import router as mobile_transfert_router
+from endpoint_api.endpoint_login_mobile import router as login_router
 
 app = FastAPI(
     title="Conta Backend API",
