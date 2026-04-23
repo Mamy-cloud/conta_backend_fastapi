@@ -1,45 +1,74 @@
-from app.connexion_db.connexion_db import engine, Base
+import logging
 from sqlalchemy import (
-    Column, Text, Integer, ForeignKey,
-    CheckConstraint
+    Column,
+    String,
+    Integer,
+    ForeignKey,
+    CheckConstraint,
 )
 from sqlalchemy.orm import relationship
 
+from app.connexion_cloud.connexion_db import Base, engine
 
-# ─── Modèles ──────────────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────
+# LOGIN USER
+# ─────────────────────────────────────────────
 
 class LoginUser(Base):
     __tablename__ = "login_user"
 
-    id             = Column(Text, primary_key=True)
-    identifiant    = Column(Text, nullable=False, unique=True)
-    password       = Column(Text, nullable=False)
-    email          = Column(Text, nullable=True, unique=True)
-    date_naissance = Column(Text, nullable=True)
-    created_at     = Column(Text, nullable=False)
+    id = Column(String, primary_key=True)
+    identifiant = Column(String(255), nullable=False, unique=True, index=True)
+    password = Column(String, nullable=False)
 
-    # Relations
-    infos_perso = relationship("InfoPersoTemoin",       back_populates="user")
-    collectes   = relationship("CollectInfoFromTemoin", back_populates="user")
+    email = Column(String(255), nullable=True, unique=True)
+    date_naissance = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
 
+    infos_perso = relationship(
+        "InfoPersoTemoin",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    collectes = relationship(
+        "CollectInfoFromTemoin",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+# ─────────────────────────────────────────────
+# INFO TEMOIN
+# ─────────────────────────────────────────────
 
 class InfoPersoTemoin(Base):
     __tablename__ = "info_perso_temoin"
 
-    id             = Column(Text, primary_key=True)
-    user_id        = Column(Text, ForeignKey("login_user.id"), nullable=True)
-    nom            = Column(Text, nullable=False)
-    prenom         = Column(Text, nullable=False)
-    date_naissance = Column(Text, nullable=True)
-    departement    = Column(Text, nullable=True)
-    region         = Column(Text, nullable=True)
-    img_temoin     = Column(Text, nullable=True)
-    contacts       = Column(Text, nullable=False, default="[]")
-    signature_url  = Column(Text, nullable=True)
-    accepte_rgpd   = Column(Integer, nullable=False, default=0)
-    date_creation  = Column(Text, nullable=False)
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("login_user.id"), nullable=True)
 
-    # Relations
+    nom = Column(String(255), nullable=False)
+    prenom = Column(String(255), nullable=False)
+
+    date_naissance = Column(String, nullable=True)
+    departement = Column(String, nullable=True)
+    region = Column(String, nullable=True)
+
+    img_temoin = Column(String, nullable=True)
+
+    # JSON stocké proprement (string mais contrôlé)
+    contacts = Column(String, nullable=False, default="[]")
+
+    signature_url = Column(String, nullable=True)
+
+    accepte_rgpd = Column(Integer, nullable=False, default=0)
+
+    date_creation = Column(String, nullable=False)
+
     user = relationship("LoginUser", back_populates="infos_perso")
 
     __table_args__ = (
@@ -47,53 +76,83 @@ class InfoPersoTemoin(Base):
     )
 
 
+# ─────────────────────────────────────────────
+# COLLECT INFO
+# ─────────────────────────────────────────────
+
 class CollectInfoFromTemoin(Base):
     __tablename__ = "collect_info_from_temoin"
 
-    id            = Column(Text, primary_key=True)
-    user_id       = Column(Text, ForeignKey("login_user.id"), nullable=False)
-    questionnaire = Column(Text, nullable=False, default="[]")
-    url_audio     = Column(Text, nullable=True)
-    duree_audio   = Column(Integer, nullable=False, default=0)
-    synced        = Column(Integer, nullable=False, default=0)
-    created_at    = Column(Text, nullable=False)
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("login_user.id"), nullable=False)
 
-    # Relations
-    user              = relationship("LoginUser",               back_populates="collectes")
-    info_perso_linked = relationship("InfoPersoTemoinCollect",  back_populates="collecte")
+    questionnaire = Column(String, nullable=False, default="[]")
+
+    url_audio = Column(String, nullable=True)
+
+    duree_audio = Column(Integer, nullable=False, default=0)
+
+    synced = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(String, nullable=False)
+
+    user = relationship("LoginUser", back_populates="collectes")
+
+    info_perso_linked = relationship(
+        "InfoPersoTemoinCollect",
+        back_populates="collecte",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         CheckConstraint("synced IN (0, 1)", name="chk_synced"),
     )
 
 
+# ─────────────────────────────────────────────
+# LINK TABLE
+# ─────────────────────────────────────────────
+
 class InfoPersoTemoinCollect(Base):
     __tablename__ = "info_perso_temoin_collect"
 
-    id         = Column(Text, primary_key=True)
-    collect_id = Column(Text, ForeignKey("collect_info_from_temoin.id"), nullable=False)
-    created_at = Column(Text, nullable=False)
+    id = Column(String, primary_key=True)
+    collect_id = Column(
+        String,
+        ForeignKey("collect_info_from_temoin.id"),
+        nullable=False,
+    )
 
-    # Relations
-    collecte = relationship("CollectInfoFromTemoin", back_populates="info_perso_linked")
+    created_at = Column(String, nullable=False)
 
-
-# ─── Création / suppression des tables ────────────────────────────────────────
-
-def create_all_tables() -> None:
-    """Crée toutes les tables si elles n'existent pas."""
-    Base.metadata.create_all(bind=engine)
-    print("✅ Tables créées avec succès.")
-    print("   → login_user")
-    print("   → info_perso_temoin")
-    print("   → collect_info_from_temoin")
-    print("   → info_perso_temoin_collect")
+    collecte = relationship(
+        "CollectInfoFromTemoin",
+        back_populates="info_perso_linked",
+    )
 
 
-def drop_all_tables() -> None:
-    """Supprime toutes les tables — dev uniquement ⚠️"""
-    Base.metadata.drop_all(bind=engine)
-    print("⚠️  Toutes les tables ont été supprimées.")
+# ─────────────────────────────────────────────
+# TABLE MANAGEMENT (SAFE PROD)
+# ─────────────────────────────────────────────
+
+def create_all_tables():
+    """Création safe (DEV ONLY)."""
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Tables créées avec succès")
+    except Exception as e:
+        logger.error(f"Erreur création tables: {e}")
+        raise
+
+
+def drop_all_tables():
+    """⚠️ DEV ONLY"""
+    try:
+        Base.metadata.drop_all(bind=engine)
+        logger.warning("Toutes les tables ont été supprimées")
+    except Exception as e:
+        logger.error(f"Erreur suppression tables: {e}")
+        raise
 
 
 if __name__ == "__main__":

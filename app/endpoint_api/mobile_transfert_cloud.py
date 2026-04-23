@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, s
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect
 
-from app.connexion_db.connexion_db import get_db, engine
+from app.connexion_cloud.connexion_db import get_db
+
 from app.models.base_model_from_mobile import SyncResponse
 from app.request_command.transfert_cloud_from_mobile import handle_sync_from_mobile
 from app.request_command.request_create_table import (
@@ -21,11 +22,25 @@ router = APIRouter(
 )
 
 
-# ─── Helper : vérifie que toutes les tables existent ─────────────────────────
+# ─────────────────────────────────────────────────────────────
+# SAFE ENGINE ACCESS (évite crash au import)
+# ─────────────────────────────────────────────────────────────
+
+def _get_engine():
+    from app.connexion_cloud.connexion_db import engine
+    return engine
+
+
+# ─────────────────────────────────────────────────────────────
+# TABLE CHECK (SAFE)
+# ─────────────────────────────────────────────────────────────
 
 def _check_tables_and_relations() -> dict:
+    engine = _get_engine()
+
     inspector = inspect(engine)
-    existing  = inspector.get_table_names()
+    existing = inspector.get_table_names()
+
     logger.debug(f"Tables existantes : {existing}")
 
     required = {
@@ -34,143 +49,149 @@ def _check_tables_and_relations() -> dict:
         "collect_info_from_temoin",
         "info_perso_temoin_collect",
     }
+
     missing = required - set(existing)
+
     if missing:
-        logger.warning(f"Tables manquantes, création : {missing}")
-        create_all_tables()
+        logger.warning(f"Tables manquantes → création : {missing}")
+        try:
+            create_all_tables()
+        except Exception as e:
+            logger.error(f"Erreur création tables : {e}", exc_info=True)
+            raise
 
     fk_status = {}
+
     for table in required:
-        fks = inspector.get_foreign_keys(table)
+        try:
+            fks = inspector.get_foreign_keys(table)
+        except Exception:
+            fks = []
+
         fk_status[table] = [
             {
-                "colonne":           fk["constrained_columns"],
-                "référence_table":   fk["referred_table"],
-                "référence_colonne": fk["referred_columns"],
+                "colonne": fk.get("constrained_columns"),
+                "référence_table": fk.get("referred_table"),
+                "référence_colonne": fk.get("referred_columns"),
             }
             for fk in fks
         ]
+
     return {
         "tables_existantes": list(existing),
         "tables_manquantes": list(missing),
-        "tables_créées":     list(missing) if missing else [],
-        "foreign_keys":      fk_status,
+        "tables_créées": list(missing) if missing else [],
+        "foreign_keys": fk_status,
     }
 
 
-# ─── GET /health ──────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# HEALTH CHECK
+# ─────────────────────────────────────────────────────────────
 
 @router.get(
     "/health",
-    summary="Vérifie les tables et confirme que le serveur est opérationnel",
+    summary="Vérifie DB + serveur",
     status_code=status.HTTP_200_OK,
 )
 def check_db_health():
-    """
-    Appelé par le mobile avant chaque synchronisation.
-    Retourne success=True si le serveur et la DB sont prêts.
-    """
     try:
         result = _check_tables_and_relations()
-        logger.info("Health check OK")
+
         return {
             "success": True,
-            "status":  "ok",
+            "status": "ok",
             "message": "Serveur opérationnel",
             "details": result,
         }
+
     except Exception as e:
-        logger.error(f"Erreur health check : {e}", exc_info=True)
+        logger.error(f"Health check error : {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "success": False,
-                "message": f"Erreur serveur : {str(e)}",
-            },
+            status_code=500,
+            detail={"success": False, "message": str(e)},
         )
 
 
-# ─── POST /sync ───────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# SYNC MOBILE
+# ─────────────────────────────────────────────────────────────
 
 @router.post(
     "/sync",
-    summary="Reçoit une collecte depuis le mobile et synchronise vers le cloud",
+    summary="Sync mobile → cloud",
     response_model=SyncResponse,
     status_code=status.HTTP_200_OK,
 )
 async def sync_from_mobile(
-    user_id:       str        = Form(...),
-    temoin:        str        = Form(...),
-    questionnaire: str        = Form(...),
-    duree_audio:   int        = Form(0),
-    audio:         UploadFile = File(None),
-    image:         UploadFile = File(None),
-    db:            Session    = Depends(get_db),
+    user_id: str = Form(...),
+    temoin: str = Form(...),
+    questionnaire: str = Form(...),
+    duree_audio: int = Form(0),
+    audio: UploadFile = File(None),
+    image: UploadFile = File(None),
+    db: Session = Depends(get_db),
 ):
-    """
-    Endpoint principal appelé par le mobile (multipart/form-data).
-    Retourne toujours un SyncResponse avec success=True ou False.
-    """
-    logger.info(f"sync_from_mobile — user_id={user_id}")
-    logger.debug(f"audio={audio.filename if audio else None} | image={image.filename if image else None}")
+    logger.info(f"sync_from_mobile user_id={user_id}")
 
-    # 1. Vérifie les tables
+    # ── CHECK TABLES SAFE ──
     try:
         _check_tables_and_relations()
     except Exception as e:
-        logger.error(f"Erreur tables : {e}", exc_info=True)
+        logger.error(f"Table error : {e}", exc_info=True)
         return SyncResponse(
-            success = False,
-            message = f"Erreur initialisation tables : {str(e)}",
+            success=False,
+            message=f"Erreur DB init : {str(e)}",
         )
 
-    # 2. Valide le JSON
+    # ── VALID JSON ──
     try:
         json.loads(temoin)
         json.loads(questionnaire)
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON invalide : {e}")
+    except Exception as e:
         return SyncResponse(
-            success = False,
-            message = f"JSON invalide : {str(e)}",
+            success=False,
+            message=f"JSON invalide : {str(e)}",
         )
 
-    # 3. Traitement principal
-    response = await handle_sync_from_mobile(
-        db                 = db,
-        user_id            = user_id,
-        temoin_json        = temoin,
-        questionnaire_json = questionnaire,
-        audio_file         = audio,
-        image_file         = image,
-        duree_audio        = duree_audio,
-    )
+    # ── SYNC LOGIC ──
+    try:
+        response = await handle_sync_from_mobile(
+            db=db,
+            user_id=user_id,
+            temoin_json=temoin,
+            questionnaire_json=questionnaire,
+            audio_file=audio,
+            image_file=image,
+            duree_audio=duree_audio,
+        )
 
-    if response.success:
-        logger.info(f"Sync OK — collect_id={response.collect_id}")
-    else:
-        logger.error(f"Sync échoué : {response.message}")
+        return response
 
-    # Retourne toujours 200 avec success=True/False
-    # (le mobile lit le champ success pour décider)
-    return response
+    except Exception as e:
+        logger.error(f"sync error : {e}", exc_info=True)
+        return SyncResponse(
+            success=False,
+            message=str(e),
+        )
 
 
-# ─── GET /collectes/{user_id} ─────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# GET COLLECTES
+# ─────────────────────────────────────────────────────────────
 
 @router.get(
     "/collectes/{user_id}",
-    summary="Collectes synchronisées d'un utilisateur",
-    status_code=status.HTTP_200_OK,
+    summary="Collectes utilisateur",
 )
 def get_collectes_by_user(user_id: str, db: Session = Depends(get_db)):
-    logger.info(f"get_collectes — user_id={user_id}")
     try:
         user = db.query(LoginUser).filter(LoginUser.id == user_id).first()
+
         if not user:
             raise HTTPException(
                 status_code=404,
-                detail={"success": False, "message": f"Utilisateur '{user_id}' introuvable"},
+                detail={"success": False, "message": "Utilisateur introuvable"},
             )
 
         collectes = db.query(CollectInfoFromTemoin).filter(
@@ -178,24 +199,23 @@ def get_collectes_by_user(user_id: str, db: Session = Depends(get_db)):
         ).all()
 
         return {
-            "success":   True,
-            "user_id":   user_id,
-            "total":     len(collectes),
+            "success": True,
+            "user_id": user_id,
+            "total": len(collectes),
             "collectes": [
                 {
-                    "id":          c.id,
-                    "url_audio":   c.url_audio,
+                    "id": c.id,
+                    "url_audio": c.url_audio,
                     "duree_audio": c.duree_audio,
-                    "synced":      c.synced,
-                    "created_at":  c.created_at,
+                    "synced": c.synced,
+                    "created_at": c.created_at,
                 }
                 for c in collectes
             ],
         }
-    except HTTPException:
-        raise
+
     except Exception as e:
-        logger.error(f"Erreur get_collectes : {e}", exc_info=True)
+        logger.error(f"get_collectes error : {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={"success": False, "message": str(e)},
