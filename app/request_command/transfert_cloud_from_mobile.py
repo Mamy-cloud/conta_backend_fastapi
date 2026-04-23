@@ -5,14 +5,14 @@ from datetime import datetime
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from connexion_db.connexion_bucket import upload_audio, upload_image
-from models.base_model_from_mobile import (
+from app.connexion_db.connexion_bucket import upload_audio, upload_image
+from app.models.base_model_from_mobile import (
     CollecteFromMobile,
     TemoinFromMobile,
     QuestionnaireItem,
     SyncResponse,
 )
-from request_command.request_create_table import (
+from app.request_command.request_create_table import (
     LoginUser,
     InfoPersoTemoin,
     CollectInfoFromTemoin,

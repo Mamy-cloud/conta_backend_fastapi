@@ -1,7 +1,7 @@
 # verif_login_mobile.py
 import logging
 from sqlalchemy.orm import Session
-from request_command.request_create_table import LoginUser
+from app.request_command.request_create_table import LoginUser
 
 logger = logging.getLogger(__name__)
 

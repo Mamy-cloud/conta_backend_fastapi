@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, s
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect
 
-from connexion_db.connexion_db import get_db
-from models.base_model_from_mobile import SyncResponse
-from request_command.transfert_cloud_from_mobile import handle_sync_from_mobile
-from request_command.request_create_table import (
+from app.connexion_db.connexion_db import get_db
+from app.models.base_model_from_mobile import SyncResponse
+from app.request_command.transfert_cloud_from_mobile import handle_sync_from_mobile
+from app.request_command.request_create_table import (
     Base,
     LoginUser,
     InfoPersoTemoin,
@@ -14,7 +14,7 @@ from request_command.request_create_table import (
     InfoPersoTemoinCollect,
     create_all_tables,
 )
-from connexion_db.connexion_db import engine
+from app.connexion_db.connexion_db import engine
 
 router = APIRouter(
     prefix="/mobile/transfert/cloud",
