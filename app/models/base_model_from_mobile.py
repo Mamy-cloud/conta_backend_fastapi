@@ -2,18 +2,12 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Any
 
 
-# ─── Questionnaire ────────────────────────────────────────────────────────────
-
 class QuestionnaireItem(BaseModel):
-    """Un champ du questionnaire ex: {'champ': 'temoin_id', 'valeur': 'xxx'}"""
     champ:  str
     valeur: Any = None
 
 
-# ─── Témoin (info_perso_temoin) ───────────────────────────────────────────────
-
 class TemoinFromMobile(BaseModel):
-    """Données du témoin envoyées depuis le mobile (champ 'temoin' du multipart)."""
     id:             Optional[str] = None
     user_id:        Optional[str] = None
     nom:            Optional[str] = None
@@ -27,47 +21,48 @@ class TemoinFromMobile(BaseModel):
     date_creation:  Optional[str] = None
 
 
-# ─── Collecte (collect_info_from_temoin) ─────────────────────────────────────
-
 class CollecteFromMobile(BaseModel):
-    """
-    Payload complet reçu depuis le mobile via multipart/form-data sur POST /sync.
-
-    Champs texte du multipart :
-      - user_id       : identifiant de l'utilisateur
-      - temoin        : JSON stringifié → TemoinFromMobile
-      - questionnaire : JSON stringifié → List[QuestionnaireItem]
-
-    Fichiers du multipart (optionnels) :
-      - audio : fichier audio (géré via UploadFile dans l'endpoint)
-      - image : photo du témoin (géré via UploadFile dans l'endpoint)
-    """
-    user_id:       str
-    temoin:        TemoinFromMobile
-    questionnaire: List[QuestionnaireItem] = []
+    user_id:          str
+    temoin:           TemoinFromMobile
+    questionnaire:    List[QuestionnaireItem] = []
+    id_questionnaire: Optional[str] = None     # ← identifiant unique anti-doublon
 
 
-# ─── Réponse FastAPI → Mobile ─────────────────────────────────────────────────
+# ─── Vérification des doublons ────────────────────────────────────────────────
+
+class CheckIdsRequest(BaseModel):
+    """Le mobile envoie tous ses id_questionnaire non synchronisés."""
+    user_id:           str
+    id_questionnaires: List[str]
+
+
+class CheckIdsResponse(BaseModel):
+    """FastAPI retourne uniquement les ids qui n'existent PAS encore en DB."""
+    ids_a_transferer: List[str]   # ids absents → à transférer
+    ids_deja_synced:  List[str]   # ids déjà présents → à ignorer
+    total_envoye:     int
+    total_a_transferer: int
+
+
+# ─── Sync response ────────────────────────────────────────────────────────────
 
 class SyncResponse(BaseModel):
-    """Réponse renvoyée au mobile après un sync réussi."""
-    success:    bool
-    collect_id: Optional[str] = None
-    audio_url:  Optional[str] = None
-    image_url:  Optional[str] = None
-    message:    Optional[str] = None
+    success:          bool
+    collect_id:       Optional[str] = None
+    id_questionnaire: Optional[str] = None
+    audio_url:        Optional[str] = None
+    image_url:        Optional[str] = None
+    message:          Optional[str] = None
 
 
 # ─── Login ────────────────────────────────────────────────────────────────────
 
 class LoginRequest(BaseModel):
-    """Payload de connexion envoyé par le mobile."""
     identifiant: str
     password:    str
 
 
 class LoginResponse(BaseModel):
-    """Réponse après connexion réussie."""
     success:    bool
     user_id:    Optional[str] = None
     token:      Optional[str] = None
