@@ -9,7 +9,7 @@ from app.models.base_model_login_mobile import (
     LoginMobileResponse,
     ServerStatusResponse,
 )
-from app.request_command.verif_login_mobile import verif_login_mobile
+from app.request_command.login.verif_login_mobile import verif_login_mobile
 
 logger = logging.getLogger(__name__)
 

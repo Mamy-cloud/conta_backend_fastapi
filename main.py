@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.endpoint_api.mobile_transfert_cloud import router as mobile_transfert_router
 from app.endpoint_api.endpoint_login_mobile import router as login_router
+from app.endpoint_api.endpoint_sign_up_web import router as sign_up_web_router
+from app.endpoint_api.endpoint_login_web import router as login_web_router
 
 app = FastAPI(
     title="Conta Backend API",
@@ -39,4 +41,6 @@ def bonjour_uptime_robot():
     }
 
 app.include_router(login_router)
+app.include_router(sign_up_web_router)
+app.include_router(login_web_router)
 
