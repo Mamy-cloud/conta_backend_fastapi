@@ -31,6 +31,8 @@ def insert_new_user(data: SignUpWebRequest) -> NewUserSession:
     print("=" * 60)
     print("[DEBUG] insert_new_user() — début")
     print(f"[DEBUG] user_id généré    : {user_id}")
+    print(f"[DEBUG] nom               : {data.nom.strip()}")
+    print(f"[DEBUG] prenom            : {data.prenom.strip()}")
     print(f"[DEBUG] identifiant       : {data.nom_utilisateur.strip()}")
     print(f"[DEBUG] email             : {data.email.strip().lower()}")
     print(f"[DEBUG] date_naissance    : {data.date_naissance}")
@@ -41,6 +43,8 @@ def insert_new_user(data: SignUpWebRequest) -> NewUserSession:
         id             = user_id,
         identifiant    = data.nom_utilisateur.strip(),
         password       = data.mot_de_passe,
+        nom            = data.nom.strip(),
+        prenom         = data.prenom.strip(),
         email          = data.email.strip().lower(),
         date_naissance = data.date_naissance,
         created_at     = created_at,

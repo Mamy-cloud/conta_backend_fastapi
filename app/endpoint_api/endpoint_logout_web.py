@@ -1,7 +1,7 @@
 # ================================================
 # endpoint_logout_web.py
 # Endpoint POST /logout/web/conta
-# Supprime les 3 cookies HttpOnly de session
+# Supprime les 5 cookies HttpOnly de session
 # ================================================
 
 from fastapi import APIRouter
@@ -11,7 +11,7 @@ router = APIRouter()
 
 COOKIE_DEL_OPTS = dict(
     httponly = True,
-    secure   = True,    # False en dev local (HTTP)
+    secure   = False,    # False en dev local (HTTP)
     samesite = "lax",
 )
 
@@ -27,6 +27,8 @@ async def logout_web() -> JSONResponse:
       - session_user_id
       - session_identifiant
       - session_email
+      - session_nom
+      - session_prenom
     Le navigateur les efface dès réception de la réponse.
     """
 
@@ -40,5 +42,7 @@ async def logout_web() -> JSONResponse:
     response.delete_cookie(key="session_user_id",     **COOKIE_DEL_OPTS)
     response.delete_cookie(key="session_identifiant", **COOKIE_DEL_OPTS)
     response.delete_cookie(key="session_email",       **COOKIE_DEL_OPTS)
+    response.delete_cookie(key="session_nom",         **COOKIE_DEL_OPTS)
+    response.delete_cookie(key="session_prenom",      **COOKIE_DEL_OPTS)
 
     return response

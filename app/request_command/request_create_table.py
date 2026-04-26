@@ -14,6 +14,8 @@ class LoginUser(Base):
     id             = Column(Text, primary_key=True)
     identifiant    = Column(Text, nullable=False, unique=True)
     password       = Column(Text, nullable=False)
+    nom            = Column(Text, nullable=True)
+    prenom         = Column(Text, nullable=True)
     email          = Column(Text, nullable=True, unique=True)
     date_naissance = Column(Text, nullable=True)
     created_at     = Column(Text, nullable=False)
@@ -48,20 +50,22 @@ class InfoPersoTemoin(Base):
 class CollectInfoFromTemoin(Base):
     __tablename__ = "collect_info_from_temoin"
 
-    id               = Column(Text, primary_key=True)
-    user_id          = Column(Text, ForeignKey("login_user.id"), nullable=False)
-    questionnaire    = Column(Text, nullable=False, default="[]")
-    url_audio        = Column(Text, nullable=True)
-    duree_audio      = Column(Integer, nullable=False, default=0)
-    synced           = Column(Integer, nullable=False, default=0)
-    id_questionnaire = Column(Text, nullable=True, unique=True)  # ← anti-doublon
-    created_at       = Column(Text, nullable=False)
+    id                       = Column(Text,    primary_key=True)
+    user_id                  = Column(Text,    ForeignKey("login_user.id"), nullable=False)
+    questionnaire            = Column(Text,    nullable=False, default="[]")
+    url_audio                = Column(Text,    nullable=True)
+    duree_audio              = Column(Integer, nullable=False, default=0)
+    synced                   = Column(Integer, nullable=False, default=0)
+    id_questionnaire         = Column(Text,    nullable=True, unique=True)
+    traitement_transcription = Column(Integer, nullable=False, default=0)
+    created_at               = Column(Text,    nullable=False)
 
     user              = relationship("LoginUser",              back_populates="collectes")
     info_perso_linked = relationship("InfoPersoTemoinCollect", back_populates="collecte")
 
     __table_args__ = (
-        CheckConstraint("synced IN (0, 1)", name="chk_synced"),
+        CheckConstraint("synced IN (0, 1)",                   name="chk_synced"),
+        CheckConstraint("traitement_transcription IN (0, 1)", name="chk_traitement_transcription"),
     )
 
 
@@ -80,9 +84,9 @@ class InfoPersoTemoinCollect(Base):
 def create_all_tables() -> None:
     Base.metadata.create_all(bind=engine)
     print("✅ Tables créées avec succès.")
-    print("   → login_user")
+    print("   → login_user                 (+ nom, prenom)")
     print("   → info_perso_temoin")
-    print("   → collect_info_from_temoin  (avec id_questionnaire UNIQUE)")
+    print("   → collect_info_from_temoin   (+ traitement_transcription)")
     print("   → info_perso_temoin_collect")
 
 

@@ -1,7 +1,6 @@
 # ================================================
 # sign_up_web.py
 # Endpoint POST /sign_up/web
-# Inscrit l'utilisateur et pose les cookies HttpOnly
 # ================================================
 
 from fastapi import APIRouter
@@ -14,7 +13,7 @@ router = APIRouter()
 
 COOKIE_OPTS = dict(
     httponly = True,
-    secure   = True,
+    secure   = False,
     samesite = "lax",
     max_age  = 60 * 60 * 24 * 7,
 )
@@ -67,16 +66,14 @@ async def sign_up_web(body: SignUpWebRequest) -> JSONResponse:
         ).model_dump(),
     )
 
-    # ── Pose des 3 cookies HttpOnly ──────────────────────
-    response.set_cookie(key="session_user_id",     value=user.user_id,     **COOKIE_OPTS)
-    response.set_cookie(key="session_identifiant", value=user.identifiant, **COOKIE_OPTS)
-    response.set_cookie(key="session_email",       value=user.email,       **COOKIE_OPTS)
+    # ── Pose des cookies HttpOnly ──────────────────────
+    response.set_cookie(key="session_user_id",     value=user.user_id,          **COOKIE_OPTS)
+    response.set_cookie(key="session_identifiant", value=user.identifiant,       **COOKIE_OPTS)
+    response.set_cookie(key="session_email",       value=user.email,             **COOKIE_OPTS)
+    response.set_cookie(key="session_nom",         value=body.nom.strip(),       **COOKIE_OPTS)
+    response.set_cookie(key="session_prenom",      value=body.prenom.strip(),    **COOKIE_OPTS)
 
-    print("[DEBUG] ✅ Cookies posés :")
-    print(f"  session_user_id     : {user.user_id}")
-    print(f"  session_identifiant : {user.identifiant}")
-    print(f"  session_email       : {user.email}")
-    print("[DEBUG] Réponse 201 envoyée")
+    print("[DEBUG] ✅ Cookies posés")
     print("=" * 60)
 
     return response

@@ -14,9 +14,9 @@ router = APIRouter()
 
 COOKIE_OPTS = dict(
     httponly = True,
-    secure   = True,    # False en dev local (HTTP)
+    secure   = False,
     samesite = "lax",
-    max_age  = 60 * 60 * 24 * 7,   # 7 jours
+    max_age  = 60 * 60 * 24 * 7,
 )
 
 
@@ -27,12 +27,6 @@ COOKIE_OPTS = dict(
     tags=["Auth"],
 )
 async def login_web(body: LoginWebRequest) -> JSONResponse:
-    """
-    Vérifie les credentials et pose 3 cookies HttpOnly :
-      - session_user_id
-      - session_identifiant
-      - session_email
-    """
 
     try:
         user = verify_login(body)
@@ -46,7 +40,10 @@ async def login_web(body: LoginWebRequest) -> JSONResponse:
             ).model_dump(),
         )
 
-    except Exception:
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[DEBUG] ❌ Exception : {type(e).__name__} — {e}")
         return JSONResponse(
             status_code=500,
             content=LoginWebResponse(
@@ -64,9 +61,11 @@ async def login_web(body: LoginWebRequest) -> JSONResponse:
         ).model_dump(),
     )
 
-    # ── Pose des 3 cookies HttpOnly ──────────────────────
-    response.set_cookie(key="session_user_id",    value=user.user_id,                **COOKIE_OPTS)
-    response.set_cookie(key="session_identifiant", value=user.identifiant,            **COOKIE_OPTS)
-    response.set_cookie(key="session_email",       value=user.email or "",            **COOKIE_OPTS)
+    # ── Pose des cookies HttpOnly ──────────────────────
+    response.set_cookie(key="session_user_id",     value=user.user_id,        **COOKIE_OPTS)
+    response.set_cookie(key="session_identifiant", value=user.identifiant,     **COOKIE_OPTS)
+    response.set_cookie(key="session_email",       value=user.email or "",     **COOKIE_OPTS)
+    response.set_cookie(key="session_nom",         value=user.nom    or "",    **COOKIE_OPTS)
+    response.set_cookie(key="session_prenom",      value=user.prenom or "",    **COOKIE_OPTS)
 
     return response

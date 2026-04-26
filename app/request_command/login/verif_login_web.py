@@ -4,6 +4,7 @@
 # ================================================
 
 from dataclasses import dataclass
+from typing import Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -17,18 +18,14 @@ _MSG_INVALID = "Identifiant ou mot de passe incorrect."
 
 @dataclass
 class UserSession:
-    user_id:    str
+    user_id:     str
     identifiant: str
-    email:      str | None
+    email:       Optional[str]
+    nom:         Optional[str]
+    prenom:      Optional[str]
 
 
 def verify_login(data: LoginWebRequest) -> UserSession:
-    """
-    Vérifie les credentials.
-    - Identifiant introuvable  → ValueError
-    - Mot de passe incorrect   → ValueError
-    - OK → retourne UserSession(user_id, identifiant, email)
-    """
 
     with Session(engine) as session:
         stmt = select(LoginUser).where(
@@ -46,4 +43,6 @@ def verify_login(data: LoginWebRequest) -> UserSession:
             user_id     = user.id,
             identifiant = user.identifiant,
             email       = user.email,
+            nom         = user.nom,
+            prenom      = user.prenom,
         )
