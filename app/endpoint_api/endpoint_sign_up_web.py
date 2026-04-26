@@ -14,7 +14,7 @@ router = APIRouter()
 
 COOKIE_OPTS = dict(
     httponly = True,
-    secure   = False,
+    secure   = True,
     samesite = "lax",
     max_age  = 60 * 60 * 24 * 7,
 )
