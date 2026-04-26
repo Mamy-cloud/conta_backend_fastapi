@@ -1,15 +1,23 @@
 # ================================================
 # sign_up_web.py
 # Endpoint POST /sign_up/web
+# Inscrit l'utilisateur et pose les cookies HttpOnly
 # ================================================
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app.models.base_model_sign_up_web  import SignUpWebRequest, SignUpWebResponse
+from app.models.base_model_sign_up_web import SignUpWebRequest, SignUpWebResponse
 from app.request_command.sign_up.update_table_sign_up_web import insert_new_user
 
 router = APIRouter()
+
+COOKIE_OPTS = dict(
+    httponly = True,
+    secure   = False,
+    samesite = "lax",
+    max_age  = 60 * 60 * 24 * 7,
+)
 
 
 @router.post(
@@ -19,27 +27,19 @@ router = APIRouter()
     tags=["Auth"],
 )
 async def sign_up_web(body: SignUpWebRequest) -> JSONResponse:
-    """
-    Reçoit le formulaire d'inscription du front-end React,
-    valide les données et insère l'utilisateur dans login_user.
 
-    Corps JSON attendu :
-    ```json
-    {
-      "nom":             "Dupont",
-      "prenom":          "Jean",
-      "email":           "jean.dupont@email.com",
-      "nom_utilisateur": "jean_dupont",
-      "mot_de_passe":    "monMotDePasse123",
-      "date_naissance":  "1990-05-14"
-    }
-    ```
-    """
+    print("=" * 60)
+    print("[DEBUG] sign_up_web() — requête reçue")
+    print(f"[DEBUG] body.nom_utilisateur : {body.nom_utilisateur}")
+    print(f"[DEBUG] body.email           : {body.email}")
+    print("=" * 60)
 
     try:
-        user_id = insert_new_user(body)
+        user = insert_new_user(body)
+        print(f"[DEBUG] insert_new_user() OK — user_id : {user.user_id}")
 
     except ValueError as e:
+        print(f"[DEBUG] ❌ ValueError : {e}")
         return JSONResponse(
             status_code=409,
             content=SignUpWebResponse(
@@ -48,7 +48,8 @@ async def sign_up_web(body: SignUpWebRequest) -> JSONResponse:
             ).model_dump(),
         )
 
-    except Exception:
+    except Exception as e:
+        print(f"[DEBUG] ❌ Exception inattendue : {type(e).__name__} — {e}")
         return JSONResponse(
             status_code=500,
             content=SignUpWebResponse(
@@ -57,11 +58,25 @@ async def sign_up_web(body: SignUpWebRequest) -> JSONResponse:
             ).model_dump(),
         )
 
-    return JSONResponse(
-        status_code=201,
+    response = JSONResponse(
+        status_code=200,
         content=SignUpWebResponse(
             success=True,
             message="Compte créé avec succès.",
-            user_id=user_id,
+            user_id=user.user_id,
         ).model_dump(),
     )
+
+    # ── Pose des 3 cookies HttpOnly ──────────────────────
+    response.set_cookie(key="session_user_id",     value=user.user_id,     **COOKIE_OPTS)
+    response.set_cookie(key="session_identifiant", value=user.identifiant, **COOKIE_OPTS)
+    response.set_cookie(key="session_email",       value=user.email,       **COOKIE_OPTS)
+
+    print("[DEBUG] ✅ Cookies posés :")
+    print(f"  session_user_id     : {user.user_id}")
+    print(f"  session_identifiant : {user.identifiant}")
+    print(f"  session_email       : {user.email}")
+    print("[DEBUG] Réponse 201 envoyée")
+    print("=" * 60)
+
+    return response

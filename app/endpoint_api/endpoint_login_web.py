@@ -1,6 +1,7 @@
 # ================================================
 # endpoint_login_web.py
 # Endpoint POST /login/web
+# Vérifie les credentials et pose les cookies HttpOnly
 # ================================================
 
 from fastapi import APIRouter
@@ -11,6 +12,13 @@ from app.request_command.login.verif_login_web import verify_login
 
 router = APIRouter()
 
+COOKIE_OPTS = dict(
+    httponly = True,
+    secure   = False,    # False en dev local (HTTP)
+    samesite = "lax",
+    max_age  = 60 * 60 * 24 * 7,   # 7 jours
+)
+
 
 @router.post(
     "/login/web",
@@ -20,25 +28,14 @@ router = APIRouter()
 )
 async def login_web(body: LoginWebRequest) -> JSONResponse:
     """
-    Reçoit les credentials du front-end React,
-    vérifie l'identifiant et le mot de passe dans login_user.
-
-    Corps JSON attendu :
-    ```json
-    {
-      "identifiant":  "jean_dupont",
-      "mot_de_passe": "monMotDePasse123"
-    }
-    ```
-
-    Réponses :
-    - 200 : connexion réussie → redirection vers /travail côté front
-    - 401 : identifiant ou mot de passe incorrect
-    - 500 : erreur interne
+    Vérifie les credentials et pose 3 cookies HttpOnly :
+      - session_user_id
+      - session_identifiant
+      - session_email
     """
 
     try:
-        user_id = verify_login(body)
+        user = verify_login(body)
 
     except ValueError as e:
         return JSONResponse(
@@ -58,11 +55,18 @@ async def login_web(body: LoginWebRequest) -> JSONResponse:
             ).model_dump(),
         )
 
-    return JSONResponse(
+    response = JSONResponse(
         status_code=200,
         content=LoginWebResponse(
             success=True,
             message="Connexion réussie.",
-            user_id=user_id,
+            user_id=user.user_id,
         ).model_dump(),
     )
+
+    # ── Pose des 3 cookies HttpOnly ──────────────────────
+    response.set_cookie(key="session_user_id",    value=user.user_id,                **COOKIE_OPTS)
+    response.set_cookie(key="session_identifiant", value=user.identifiant,            **COOKIE_OPTS)
+    response.set_cookie(key="session_email",       value=user.email or "",            **COOKIE_OPTS)
+
+    return response

@@ -19,7 +19,7 @@ ALLOWED_ORIGINS = [
     "http://localhost:8000",        # Swagger UI
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8000",
-    "https://react-web-transcriptor-conta.vercel.app",   # ← remplace par ton URL Vercel
+    "https://ton-app.vercel.app",   # ← remplace par ton URL Vercel
 ]
 
 app.add_middleware(
