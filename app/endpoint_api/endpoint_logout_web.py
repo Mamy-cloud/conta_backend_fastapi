@@ -44,5 +44,6 @@ async def logout_web() -> JSONResponse:
     response.delete_cookie(key="session_email",       **COOKIE_DEL_OPTS)
     response.delete_cookie(key="session_nom",         **COOKIE_DEL_OPTS)
     response.delete_cookie(key="session_prenom",      **COOKIE_DEL_OPTS)
+    response.delete_cookie(key="session_role",        **COOKIE_DEL_OPTS)
 
     return response

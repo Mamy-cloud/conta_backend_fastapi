@@ -106,6 +106,19 @@ ALTER TABLE list_segmentation ADD COLUMN IF NOT EXISTS fin               TEXT;
 ALTER TABLE list_segmentation ADD COLUMN IF NOT EXISTS segmentation_word TEXT;
 ALTER TABLE list_segmentation ADD COLUMN IF NOT EXISTS created_at        TEXT;
 
+-- ── password_reset_tokens ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES login_user(id),
+    token      TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0 CHECK (used IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT ''
+);
+
+ALTER TABLE password_reset_tokens ADD COLUMN IF NOT EXISTS expires_at TEXT;
+ALTER TABLE password_reset_tokens ADD COLUMN IF NOT EXISTS used       INTEGER NOT NULL DEFAULT 0;
+
 """
 
 

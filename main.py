@@ -13,6 +13,10 @@ from app.endpoint_api.endpoint_logout_web      import router as logout_web_route
 from app.endpoint_api.endpoint_get_session_web import router as session_cookie_router
 from app.endpoint_api.endpoint_display_info_temoin import router as display_info_temoin_router
 from app.endpoint_api.endpoint_transcriptor import router as transcriptor_router
+from app.endpoint_api.endpoint_list_of_interviewer_server import router as list_login_of_interviwer
+from app.endpoint_api.endpoint_list_of_data_collected import router as list_data_collected_router
+from app.middleware.verify_login_middleware import VerifyLoginMiddleware
+from app.endpoint_api.endpoint_password_reset import router as password_reset_router
 
 from app.cron.cron_create_tables import start_scheduler, job_check_tables
 
@@ -82,3 +86,7 @@ app.include_router(logout_web_router)
 app.include_router(session_cookie_router)
 app.include_router(display_info_temoin_router)
 app.include_router(transcriptor_router)
+app.include_router(list_login_of_interviwer)
+app.include_router(list_data_collected_router)
+app.add_middleware(VerifyLoginMiddleware)
+app.include_router(password_reset_router)

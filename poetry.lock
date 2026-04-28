@@ -759,6 +759,14 @@ python-versions = "<4,>=3.6"
 pyasn1 = ">=0.1.3"
 
 [[package]]
+name = "secure-smtplib"
+version = "0.1.1"
+description = "Secure SMTP subclasses for Python 2"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "six"
 version = "1.17.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -1049,7 +1057,7 @@ cffi = ["cffi (>=1.17,<2.0)", "cffi (>=2.0.0b)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "8792cf5740be62c8dfc0dd97b5cb03c269094914f9d0f955d21cc03f1d99c8e8"
+content-hash = "4204be7318da98f9809c192a41eb966314b6ad3a921d153e4cbb921389d4d639"
 
 [metadata.files]
 annotated-doc = []
@@ -1108,6 +1116,7 @@ realtime = []
 requests = []
 rich = []
 rsa = []
+secure-smtplib = []
 six = []
 sqlalchemy = []
 starlette = []
