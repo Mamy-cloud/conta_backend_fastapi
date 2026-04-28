@@ -79,6 +79,33 @@ CREATE TABLE IF NOT EXISTS info_perso_temoin_collect (
     created_at TEXT NOT NULL
 );
 
+-- ── segmentation_audio ───────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS segmentation_audio (
+    id         TEXT PRIMARY KEY,
+    collect_id TEXT NOT NULL UNIQUE REFERENCES collect_info_from_temoin(id),
+    validation INTEGER NOT NULL DEFAULT 0 CHECK (validation IN (0, 1)),
+    created_at TEXT NOT NULL
+);
+
+ALTER TABLE segmentation_audio ADD COLUMN IF NOT EXISTS collect_id TEXT;
+ALTER TABLE segmentation_audio ADD COLUMN IF NOT EXISTS validation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE segmentation_audio ADD COLUMN IF NOT EXISTS created_at TEXT;
+
+-- ── list_segmentation ────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS list_segmentation (
+    id                TEXT PRIMARY KEY,
+    segmentation_id   TEXT NOT NULL REFERENCES segmentation_audio(id),
+    debut             TEXT NOT NULL,
+    fin               TEXT NOT NULL,
+    segmentation_word TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL
+);
+
+ALTER TABLE list_segmentation ADD COLUMN IF NOT EXISTS debut             TEXT;
+ALTER TABLE list_segmentation ADD COLUMN IF NOT EXISTS fin               TEXT;
+ALTER TABLE list_segmentation ADD COLUMN IF NOT EXISTS segmentation_word TEXT;
+ALTER TABLE list_segmentation ADD COLUMN IF NOT EXISTS created_at        TEXT;
+
 """
 
 

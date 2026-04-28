@@ -79,6 +79,35 @@ class InfoPersoTemoinCollect(Base):
     collecte = relationship("CollectInfoFromTemoin", back_populates="info_perso_linked")
 
 
+class SegmentationAudio(Base):
+    __tablename__ = "segmentation_audio"
+
+    id         = Column(Text,    primary_key=True)
+    collect_id = Column(Text,    ForeignKey("collect_info_from_temoin.id"), nullable=False, unique=True)
+    validation = Column(Integer, nullable=False, default=0)
+    created_at = Column(Text,    nullable=False)
+
+    collecte  = relationship("CollectInfoFromTemoin", backref="segmentation")
+    segments  = relationship("ListSegmentation", back_populates="segmentation", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint("validation IN (0, 1)", name="chk_validation"),
+    )
+
+
+class ListSegmentation(Base):
+    __tablename__ = "list_segmentation"
+
+    id                = Column(Text, primary_key=True)
+    segmentation_id   = Column(Text, ForeignKey("segmentation_audio.id"), nullable=False)
+    debut             = Column(Text, nullable=False)
+    fin               = Column(Text, nullable=False)
+    segmentation_word = Column(Text, nullable=False, default="")
+    created_at        = Column(Text, nullable=False)
+
+    segmentation = relationship("SegmentationAudio", back_populates="segments")
+
+
 # ─── Création / suppression des tables ────────────────────────────────────────
 
 def create_all_tables() -> None:

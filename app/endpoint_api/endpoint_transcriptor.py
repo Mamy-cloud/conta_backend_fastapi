@@ -7,9 +7,11 @@ import os
 from fastapi import APIRouter, UploadFile, File, Request, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
+from typing import Optional
 
-from app.request_command.transcription.stt_whisper import transcribe_and_translate, transcribe_segments
-from app.request_command.transcription.tts_mms    import synthesize, synthesize_segments
+from app.request_command.transcription.stt_whisper                       import transcribe_and_translate, transcribe_segments
+from app.request_command.transcription.tts_mms                             import synthesize, synthesize_segments
+from app.request_command.transcription.save_segmentation   import save_segments, load_segments, validate_segmentation, update_segment_word
 
 router = APIRouter()
 
@@ -26,7 +28,15 @@ class TTSSegmentsRequest(BaseModel):
     segments: list[dict]
 
 class STTSegmentsRequest(BaseModel):
-    url_audio: str
+    url_audio:  str
+    collect_id: Optional[str] = None
+
+class ValidateSegmentationRequest(BaseModel):
+    collect_id: str
+
+class UpdateSegmentRequest(BaseModel):
+    segment_id: str
+    new_text:   str
 
 
 # ── STT — Transcription + Traduction ─────────────────────────────────────────
@@ -88,21 +98,34 @@ async def stt_segments(
     body:    STTSegmentsRequest,
 ) -> JSONResponse:
     """
-    Reçoit une url_audio, télécharge l'audio côté serveur
-    et retourne les segments horodatés.
+    1. Si collect_id fourni et segmentation déjà validée → charge depuis DB
+    2. Sinon → transcrit via Groq et sauvegarde en DB
     """
 
     user_id = request.cookies.get("session_user_id")
     if not user_id:
         return JSONResponse(status_code=401, content={"success": False, "message": "Non connecté."})
 
-    print(f"[STT SEGMENTS] URL reçue : {body.url_audio}")
+    # ── Vérifie si déjà transcrit en DB ──────────────
+    if body.collect_id:
+        existing = load_segments(body.collect_id)
+        if existing and existing["validation"]:
+            print(f"[STT SEGMENTS] ✅ Chargé depuis DB (déjà validé) collect_id={body.collect_id}")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success":    True,
+                    "segments":   existing["segments"],
+                    "from_cache": True,
+                    "validation": True,
+                },
+            )
 
+    print(f"[STT SEGMENTS] URL reçue : {body.url_audio}")
     tmp_path = os.path.join(UPLOAD_DIR, f"{user_id}_audio.wav")
 
     try:
         import httpx
-        # ── Télécharge l'audio depuis l'URL ───────────────
         audio_response = httpx.get(body.url_audio, timeout=60)
         audio_response.raise_for_status()
 
@@ -110,10 +133,13 @@ async def stt_segments(
             f.write(audio_response.content)
 
         print(f"[STT SEGMENTS] Audio téléchargé : {len(audio_response.content)} bytes")
-        print(f"[STT SEGMENTS] Envoi à Whisper API...")
-
         segments = transcribe_segments(tmp_path)
         print(f"[STT SEGMENTS] ✅ {len(segments)} segments retournés")
+
+        # ── Sauvegarde en DB ──────────────────────────
+        if body.collect_id:
+            save_segments(body.collect_id, segments)
+            print(f"[STT SEGMENTS] ✅ Segments sauvegardés en DB")
 
     except Exception as e:
         import traceback
@@ -129,8 +155,56 @@ async def stt_segments(
 
     return JSONResponse(
         status_code=200,
-        content={"success": True, "segments": segments},
+        content={"success": True, "segments": segments, "from_cache": False, "validation": False},
     )
+
+
+# ── Validation des 3 transcripteurs ──────────────────────────────────────────
+
+@router.post(
+    "/transcriptor/validate",
+    summary = "Valide la transcription — passe traitement_transcription à 1",
+    tags    = ["Transcription"],
+)
+async def validate_transcription(
+    request: Request,
+    body:    ValidateSegmentationRequest,
+) -> JSONResponse:
+
+    user_id = request.cookies.get("session_user_id")
+    if not user_id:
+        return JSONResponse(status_code=401, content={"success": False, "message": "Non connecté."})
+
+    try:
+        validate_segmentation(body.collect_id)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
+
+    return JSONResponse(status_code=200, content={"success": True, "message": "Transcription validée."})
+
+
+# ── Mise à jour d'un segment ──────────────────────────────────────────────────
+
+@router.put(
+    "/transcriptor/segment",
+    summary = "Met à jour le texte d'un segment",
+    tags    = ["Transcription"],
+)
+async def update_segment(
+    request: Request,
+    body:    UpdateSegmentRequest,
+) -> JSONResponse:
+
+    user_id = request.cookies.get("session_user_id")
+    if not user_id:
+        return JSONResponse(status_code=401, content={"success": False, "message": "Non connecté."})
+
+    try:
+        update_segment_word(body.segment_id, body.new_text)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
+
+    return JSONResponse(status_code=200, content={"success": True})
 
 
 # ── TTS — Synthèse vocale ─────────────────────────────────────────────────────
