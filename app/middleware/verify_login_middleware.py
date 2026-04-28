@@ -25,6 +25,7 @@ PUBLIC_PREFIXES = (
     "/openapi",
     "/redoc",
     "/favicon",
+    "/mobile/",
 )
 
 # ── Cookies requis — seulement les essentiels ─────────────────────────────────
