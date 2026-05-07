@@ -63,9 +63,9 @@ def save_segments(collect_id: str, segments: list[dict]) -> str:
             session.add(ListSegmentation(
                 id                = str(uuid.uuid4()),
                 segmentation_id   = seg_id,
-                debut             = s.get("debut", "00:00"),
-                fin               = s.get("fin",   "00:00"),
-                segmentation_word = s.get("texte", ""),
+                debut             = s.get("debut",    "00:00"),
+                fin               = s.get("fin",      "00:00"),
+                segmentation_word = s.get("texte_co", s.get("texte", "")),
                 created_at        = _now(),
             ))
 

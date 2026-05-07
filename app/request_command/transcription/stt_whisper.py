@@ -83,10 +83,9 @@ def _convert_to_mp3(input_path: str) -> str:
 def transcribe_segments(audio_path: str) -> list[dict]:
     """
     Transcrit l'audio avec timestamps par segment.
-    Retourne [{ "debut": "00:00", "fin": "00:05", "texte": "..." }, ...]
+    Retourne [{ "debut": "00:00", "fin": "00:05", "texte_co": "...", "texte_fr": "..." }, ...]
     """
 
-    # ── Conversion en mp3 ─────────────────────────────
     mp3_path = _convert_to_mp3(audio_path)
 
     try:
@@ -96,7 +95,8 @@ def transcribe_segments(audio_path: str) -> list[dict]:
         filename = os.path.basename(mp3_path)
         print(f"[STT] Fichier mp3 : {filename}, Taille : {len(audio_bytes)} bytes")
 
-        response = httpx.post(
+        # ── Transcription littérale (corse) ───────────
+        response_co = httpx.post(
             GROQ_API_URL,
             headers = HEADERS,
             files   = {"file": (filename, audio_bytes, "audio/mpeg")},
@@ -107,31 +107,58 @@ def transcribe_segments(audio_path: str) -> list[dict]:
             },
             timeout = 120,
         )
+        if not response_co.is_success:
+            print(f"[STT] ❌ Groq transcription error : {response_co.text}")
+        response_co.raise_for_status()
+        data_co = response_co.json()
 
-        if not response.is_success:
-            print(f"[STT] ❌ Groq error response : {response.text}")
+        # ── Traduction vers le français ───────────────
+        response_fr = httpx.post(
+            GROQ_API_URL_T,
+            headers = HEADERS,
+            files   = {"file": (filename, audio_bytes, "audio/mpeg")},
+            data    = {
+                "model":           "whisper-large-v3",
+                "response_format": "verbose_json",
+            },
+            timeout = 120,
+        )
+        if not response_fr.is_success:
+            print(f"[STT] ❌ Groq translation error : {response_fr.text}")
+        response_fr.raise_for_status()
+        data_fr = response_fr.json()
 
-        response.raise_for_status()
-        data = response.json()
+        print(f"[STT] Réponse Groq keys co : {list(data_co.keys())}")
+        print(f"[STT] Réponse Groq keys fr : {list(data_fr.keys())}")
 
-        print(f"[STT] Réponse Groq keys : {list(data.keys())}")
+        # ── Segments corse ────────────────────────────
+        segs_co = data_co.get("segments", [])
+        segs_fr = data_fr.get("segments", [])
 
         segments = []
-        for seg in data.get("segments", []):
-            debut = _format_time(seg.get("start", 0))
-            fin   = _format_time(seg.get("end",   0))
+        for i, seg in enumerate(segs_co):
+            debut    = _format_time(seg.get("start", 0))
+            fin      = _format_time(seg.get("end",   0))
+            texte_co = seg.get("text", "").strip()
+            # Associe la traduction par index si disponible
+            texte_fr = segs_fr[i].get("text", "").strip() if i < len(segs_fr) else ""
             segments.append({
-                "debut": debut,
-                "fin":   fin,
-                "texte": seg.get("text", "").strip(),
+                "debut":    debut,
+                "fin":      fin,
+                "texte_co": texte_co,
+                "texte_fr": texte_fr,
             })
 
-        if not segments and data.get("text"):
-            segments.append({
-                "debut": "00:00",
-                "fin":   "00:00",
-                "texte": data["text"].strip(),
-            })
+        if not segments:
+            texte_co = data_co.get("text", "").strip()
+            texte_fr = data_fr.get("text", "").strip()
+            if texte_co:
+                segments.append({
+                    "debut":    "00:00",
+                    "fin":      "00:00",
+                    "texte_co": texte_co,
+                    "texte_fr": texte_fr,
+                })
 
         return segments
 
